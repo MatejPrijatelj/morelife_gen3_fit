@@ -525,7 +525,6 @@ def f_part_stats(c,l,ffun=f_fun_fact):
         #S_tot=S_tot + num * S
     return r,c,l,S_t,ES_t,v_core,v_shell
 
-
 #retruns f_part_stats on distribution. it works on X for historicla reasons.
 def f_part_stats_dist(X,ModPars,dist_cs,dist_ls):
     
@@ -843,6 +842,113 @@ def f_start_dist(lmax=5,cmax=5,nl=20,nc=20,MPars=ModPars):
 #then its multiplied by total particle number
 #distribution is saved in two vectors vector of bins and vector of particle numbers devided by bin width
 #outside of the bins we assume zero particles
+
+#make vectiors from bin parameters
+def f_vl_vc(lmin=0.25,lmax=3,cmin=0.25,cmax=8):
+    
+    vec_c_borders=np.arange(0, cmax, cmin)
+    vec_l_borders=np.arange(0, lmax, lmin)
+
+    Nc=len(vec_c_borders)-1
+    Nl=len(vec_l_borders)-1
+
+    vec_c=np.zeros(Nc)
+    vec_l=np.zeros(Nl)
+
+    #create vectors of bin mids. 
+    for i in range(Nc):
+        vec_c[i] = (vec_c_borders[i]+vec_c_borders[i+1])*0.5
+    for i in range(Nl):
+        vec_l[i] = (vec_l_borders[i]+vec_l_borders[i+1])*0.5
+
+    vec_c=vec_c*10**-9
+    vec_l=vec_l*10**-9
+
+    return vec_c,vec_l
+
+#make start dist, but bring in cdist
+def f_start_dist_cin(cin,lmin1=0.25,lmax1=5.,cmin1=0.25,MPars=ModPars, loc_l=0.25, scale_l=0.25):
+
+    Nr=len(cin)
+    vec_r_borders = np.arange(0, (Nr+1) * cmin1, cmin1)
+    vec_r=np.zeros(Nr)
+    for i in range(Nr):
+        vec_r[i] = (vec_r_borders[i]+vec_r_borders[i+1])*0.5
+    #Nc=len(cin)
+    
+    vec_l_borders = np.arange(0, lmax1, lmin1)
+    Nl=len(vec_l_borders)-1
+    vec_l=np.zeros(Nl)
+    for i in range(Nl):
+        vec_l[i] = (vec_l_borders[i]+vec_l_borders[i+1])*0.5
+
+    Nc=Nr-Nl+1
+    vec_c=np.zeros(Nc)
+    vec_c_borders = np.arange(0, (Nc+1) * cmin1, cmin1)
+    #create vectors of bin mids. 
+
+    for i in range(Nc):
+        vec_c[i] = (vec_c_borders[i]+vec_c_borders[i+1])*0.5
+
+    C,L = np.meshgrid(vec_c,vec_l)
+    pdf = np.zeros(C.shape)
+    
+    #dc2 = (vec_c[1] - vec_c[0]) * 0.5
+    #dr2 = dc2
+    #vec_r= np.arange(dr2,vec_l[-1]+vec_c[-1],2*dr2)
+    
+    distr_l = norm( loc=loc_l, scale=scale_l ) #parameter for pt shell
+    distr_c = cin #parameters for every variable.    
+
+    for i in range(C.shape[0]):
+        for j in range(C.shape[1]):
+            #pdf[i,j] = distr.pdf([C[i,j], L[i,j]])
+            pdf[i,j] = distr_l.pdf(L[i,j])*distr_c[j] #could be i
+            
+            if vec_l[i] >  2 - vec_c[j] :
+                pass
+                #pdf[i,j] = pdf[i,j]*10**-8
+            else:
+                #pdf[i,j] = pdf[i,j]*10**-16
+                pass
+
+    pdf[0,0]=0 #set zero vals in first bin
+    vec_c=vec_c*10**-9
+    vec_l=vec_l*10**-9
+    dist_bins_prob=pdf
+    #empty the first bin for stability reasons
+
+    #normalise particle number to platinum loading.
+    #transform 2d distribution to 1D calcualtion vector
+    X = f_mat2vec(dist_bins_prob,[0,0,0])
+    
+    #this it should return pt conc why convert t conc also norm to conc
+    
+    #Ptmas = molarPt*(muNaf*A*L*1e3)*f_stats(X,MPars,vec_c,vec_l)[-2]
+    
+    pt_c_targ=ModPars[23]*1e-3/(Pt_mol_mas*ModPars[20]*ModPars[19])
+    pt_c_cur=f_stats(X,MPars,vec_c,vec_l)[-2]
+
+    #print(pt_c_cur)
+    #print(pt_c_targ)
+
+    #normalisation constant. Ratio between distribution Pt mass and nominal Pt mass
+    #nor=PtMass/Ptmas
+    nor=pt_c_targ/pt_c_cur
+
+    dist_bins_om=dist_bins_prob*nor
+
+    PtMass=ModPars[23]*ModPars[21] # Mass Of platinum in g
+    #print("ptmas"+str(PtMass))
+ 
+    VolCat=ModPars[20]*ModPars[21]*ModPars[19] #cathode volume
+    NPtTot=PtMass/molarPt
+    #print("max_C_Pt"+str(10**-3*NPtTot/VolCat))
+
+    #return distribution, bin minds
+    return dist_bins_om ,vec_c, vec_l
+
+
 
 ### an alternative function to construct the starting particle distribution
 ### minumal and maximal bin are given, spacing is determined by minimal bin size
@@ -2490,6 +2596,10 @@ print("test one simulation run")
 for i, par in enumerate(ModPars0):
     print(str(i)+"\t"+str(par))
 
+
+
+"""
+
 t0=time.time()
 
 #sol0 = solve_ivp(f_dfdt, (ti[0],ti[-1]), X0, method='LSODA',events=None, t_eval=ti, args=pars, rtol  = tol_r, atol = tol_a)
@@ -2534,6 +2644,9 @@ print(["{:.2e}".format(i) for i in stats_X])
 #print(stats_X)
 print("ratios")
 print(["{:.6f}".format(i) for i in np.array(stats_X)/np.array(stats_X0)])
+
+"""
+
 
 #so far so good
 #data inports for fiting function HARDCODED
