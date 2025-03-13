@@ -34,6 +34,9 @@ from numba import jit, config, set_num_threads, get_num_threads,threading_layer
 import matplotlib.pyplot as plt
 
 ### numba settings
+
+
+isparalel=False
 #disable jit
 config.DISABLE_JIT = False
 #se trhreading layer
@@ -41,17 +44,22 @@ config.THREADING_LAYER = 'omp'
 #config.THREADING_LAYER = 'tbb'
 
 
+#SET FOR OPTIMISATION!!!
 config.NUMBA_NUM_THREADS = 1
 config.NUMBA_DEFAULT_NUM_THREADS = 1
-#config.NUMBA_NUM_THREADS=1
-#set number of threads
 set_num_threads(1)
-#threading_layer('omp')
-
 #disable numpy threads
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
+
+
+#config.NUMBA_NUM_THREADS=1
+#set number of threads
+#SET FOR OPTIMISATION
+#set_num_threads(1)
+#threading_layer('omp')
+
 
 ### file inport/outport
 #here we inport fiting data, set output file path etc.
@@ -174,7 +182,7 @@ Umax=1.0
 #    return np.interp(x_vals % 1200, data[:,-1], data[:,0])
 
 # constant voltage funxtion
-@jit(nopython=True,parallel=False)
+@jit(nopython=True,parallel=isparalel)
 def funcUPt_const(x):
     return Umax
 
@@ -189,17 +197,17 @@ def funcUPt_saw(x):
     return (2.*Am/p)*abs( (x-p/4.)%p - p/2.) + Umin
 
 # Temperature, constant, but can be modified
-@jit(nopython=True,parallel=False)
+@jit(nopython=True,parallel=isparalel)
 def funcT(x):
     return T0
 
 # pH constant, can be modified
-@jit(nopython=True,parallel=False)
+@jit(nopython=True,parallel=isparalel)
 def funccHp(x):
     return Hp0
 
 # Heaviside function. it is used in preparation of RHS (space) derivatives
-@jit(nopython=True,parallel=False)
+@jit(nopython=True,parallel=isparalel)
 def f_nb_heaviside(x):
     if x>=0:
         return 1.
@@ -950,6 +958,89 @@ def f_start_dist_cin(cin,lmin1=0.25,lmax1=5.,cmin1=0.25,MPars=ModPars, loc_l=0.2
 
 
 
+#make start dist, but bring in cdist
+#changed in order to have cin input, but the original should be working
+def f_start_dist_cin_1(cin,lmin1=0.25,lmax1=5.,cmin1=0.25,MPars=ModPars, loc_l=0.25, scale_l=0.25):
+
+    Nr=len(cin)
+    vec_r_borders = np.arange(0, (Nr+1) * cmin1, cmin1)
+    vec_r=np.zeros(Nr)
+    for i in range(Nr):
+        vec_r[i] = (vec_r_borders[i]+vec_r_borders[i+1])*0.5
+    #Nc=len(cin)
+    
+    vec_l_borders = np.arange(0, lmax1, lmin1)
+    Nl=len(vec_l_borders)-1
+    vec_l=np.zeros(Nl)
+    for i in range(Nl):
+        vec_l[i] = (vec_l_borders[i]+vec_l_borders[i+1])*0.5
+
+    Nc=Nr-Nl+1
+    vec_c=np.zeros(Nc)
+    vec_c_borders = np.arange(0, (Nc+1) * cmin1, cmin1)
+    #create vectors of bin mids. 
+
+    for i in range(Nc):
+        vec_c[i] = (vec_c_borders[i]+vec_c_borders[i+1])*0.5
+
+    C,L = np.meshgrid(vec_c,vec_l)
+    pdf = np.zeros(C.shape)
+    
+    #dc2 = (vec_c[1] - vec_c[0]) * 0.5
+    #dr2 = dc2
+    #vec_r= np.arange(dr2,vec_l[-1]+vec_c[-1],2*dr2)
+    
+    distr_l = norm( loc=loc_l, scale=scale_l ) #parameter for pt shell
+    distr_c = cin #parameters for every variable.    
+
+    for i in range(C.shape[0]):
+        for j in range(C.shape[1]):
+            #pdf[i,j] = distr.pdf([C[i,j], L[i,j]])
+            pdf[i,j] = distr_l.pdf(L[i,j])*distr_c[j] #could be i
+            
+            if vec_l[i] >  2 - vec_c[j] :
+                pass
+                #pdf[i,j] = pdf[i,j]*10**-8
+            else:
+                #pdf[i,j] = pdf[i,j]*10**-16
+                pass
+
+    pdf[0,0]=0 #set zero vals in first bin
+    vec_c=vec_c*10**-9
+    vec_l=vec_l*10**-9
+    dist_bins_prob=pdf
+    #empty the first bin for stability reasons
+
+    #normalise particle number to platinum loading.
+    #transform 2d distribution to 1D calcualtion vector
+    X = f_mat2vec(dist_bins_prob,[0,0,0])
+    
+    #this it should return pt conc why convert t conc also norm to conc
+    
+    #Ptmas = molarPt*(muNaf*A*L*1e3)*f_stats(X,MPars,vec_c,vec_l)[-2]
+    
+    pt_c_targ=ModPars[23]*1e-3/(Pt_mol_mas*ModPars[20]*ModPars[19])
+    pt_c_cur=f_stats(X,MPars,vec_c,vec_l)[-2]
+
+    #print(pt_c_cur)
+    #print(pt_c_targ)
+
+    #normalisation constant. Ratio between distribution Pt mass and nominal Pt mass
+    #nor=PtMass/Ptmas
+    nor=pt_c_targ/pt_c_cur
+
+    dist_bins_om=dist_bins_prob*nor
+
+    PtMass=ModPars[23]*ModPars[21] # Mass Of platinum in g
+    #print("ptmas"+str(PtMass))
+ 
+    VolCat=ModPars[20]*ModPars[21]*ModPars[19] #cathode volume
+    NPtTot=PtMass/molarPt
+    #print("max_C_Pt"+str(10**-3*NPtTot/VolCat))
+
+    #return distribution, bin minds
+    return dist_bins_om ,vec_c, vec_l
+
 ### an alternative function to construct the starting particle distribution
 ### minumal and maximal bin are given, spacing is determined by minimal bin size
 ### modpars parameters provided in order to normalise to platinum loading
@@ -1512,7 +1603,7 @@ def f_dist_to_X(dist,vec_ns=[0,0,0]):
 # SFT = temperature(t)
 # SFPt = Pt potential
 # SFH = pH(t)
-@jit(nopython=True,parallel=False)
+@jit(nopython=True,parallel=isparalel)
 def f_dc_dl(t,X,ModPars,dist_cs,dist_ls,SFT,SFPt,SFH):
     
     #print("t="+"{:.2e}".format(t))
@@ -1635,7 +1726,7 @@ def f_dc_dl(t,X,ModPars,dist_cs,dist_ls,SFT,SFPt,SFH):
                 
                 rPt    = nuForPt*GamaPt    *np.exp(-HEnthPt/(R*T)) * (1.-min(1.,fiPtO))     *(\
                         1.                                             *np.exp(    -(nElPt*F*(1-betPt)/(R*T))  *(UPt-UPtin-eps_u*(l-6*ML1)-4*OmegaPt*gammaTot/(2*r*nElPt*F))  )   \
-                        -(nuBacPt/nuForPt)*(CPt/CPtRef)               *np.exp(    (nElPt*F*(betPt)/(R*T))     *(UPt-UPtin-eps_u*l-4*OmegaPt*gammaTot/(2*r*nElPt*F))  )    \
+                        -(nuBacPt/nuForPt)*(CPt/CPtRef)               *np.exp(    (nElPt*F*(betPt)/(R*T))     *(UPt-UPtin-eps_u*(l-6*ML1)-4*OmegaPt*gammaTot/(2*r*nElPt*F))  )    \
                         ) / dina_fact_1
 
             #rate of Cu dissolution #check this
@@ -1794,7 +1885,7 @@ def f_dc_dl(t,X,ModPars,dist_cs,dist_ls,SFT,SFPt,SFH):
 #returns the RHS derivatives
 #it is a wraper function for f_dcdl
 #it only returns the first output of f_dcdl 
-@jit(nopython=True,parallel=False)
+@jit(nopython=True,parallel=isparalel)
 def f_dfdt(t,X,ModPars,dist_cs,dist_ls,SF1,SF2,SF3):
     #print("t:"+str(t))
     rez=f_dc_dl(t,X,ModPars,dist_cs,dist_ls,SF1,SF2,SF3)
@@ -2469,7 +2560,7 @@ t_rates=np.array([200,200+120,200+120*2,200+120*3,200+120*4])*60*60
 #transformed to secconds
 U0=0.7
 #max tiem = trates[4]
-@jit(nopython=True,parallel=False)
+@jit(nopython=True,parallel=isparalel)
 def funcUPt_exp(t):
     if t <t_rates[0]:
         U=U0 - rates[0]*t
