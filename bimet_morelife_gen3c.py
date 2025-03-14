@@ -2289,11 +2289,10 @@ def f_calc_delta(X0,X1,ModPars,dist_cs,dist_ls):
 #TODO: nested execution failsafes
 #TODO: breaks
 
-def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
+def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2,pars=pars,X0=X0):
 
     #target
     #
-
 
     tStart = time.time()
 
@@ -2305,7 +2304,7 @@ def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
     finish_steps=3
     
     t0=0
-    rez_stat_4=updated_pt_aloy_fit_all_2.f_stats(X0,ModPars,vec_c,vec_l)
+    rez_stat_4=f_stats(X0,ModPars,vec_c,vec_l)
     rez_stat_4=np.array(rez_stat_4)
     rez_t_4=[t0]
     Xin=X0
@@ -2321,7 +2320,7 @@ def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
     
     current_date = datetime.now().strftime('%Y-%m-%d')
     base_filename = f"data_"+str(round_max)+f"_sim_{current_date}.txt"
-    filename =  updated_pt_aloy_fit_all_2.f_create_unique_filename(base_filename)
+    filename =  f_create_unique_filename(base_filename)
     #f_append_to_file(filename,str(0) + " " + str(X0) )
     
     i=0
@@ -2336,7 +2335,7 @@ def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
             print("mode 0: calculating "+str(s_cycs)+" cycles")
             #sol=f_run_cyc(Xin,0,s_cycs)
             #sol=updated_pt_aloy_fit_all_2.f_run_cyc(Xin,Am/(rateMax),0,s_cycs)
-            sol=updated_pt_aloy_fit_all_2.f_run_cyc(Xin,Am/(rateMax),0,s_cycs,pars,tol_r,tol_a)
+            sol=f_run_cyc(Xin,Am/(rateMax),0,s_cycs,pars,tol_r,tol_a)
 
             Xin=sol.y[:,-1]
             t0=sol.t[-1]
@@ -2358,7 +2357,7 @@ def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
             #run a cycle and calculate dX
             #sol=updated_pt_aloy_fit_all_2.f_run_cyc(Xin,Am/(rateMax),0,1)
             tStart = time.time()
-            sol=updated_pt_aloy_fit_all_2.f_run_cyc(Xin,Am/(rateMax),0,1,pars,tol_r,tol_a)
+            sol=f_run_cyc(Xin,Am/(rateMax),0,1,pars,tol_r,tol_a)
             tEnd = time.time()
             print("Dt= "+str(tEnd-tStart))
 
@@ -2368,7 +2367,7 @@ def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
                 print("encountered negative value")
                 break
             
-            dX=updated_pt_aloy_fit_all_2.f_calc_delta(X01,Xin,ModPars,vec_c,vec_l)
+            dX=f_calc_delta(X01,Xin,ModPars,vec_c,vec_l)
             
             i=i+1
             #this may need to be changed in ver 2 in order to fix indices
@@ -2383,7 +2382,7 @@ def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
             Xratios=Xin/dX
             
             #check wat is the smallest negative value and also report index.
-            max_ratio= highest_negative = np.max(Xratios[Xratios < 0]) if np.any(Xratios < 0) else None
+            max_ratio= np.max(Xratios[Xratios < 0]) if np.any(Xratios < 0) else None
             
             print("max_ratio= "+str(max_ratio))
             #treshold = 2.
@@ -2422,11 +2421,11 @@ def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
                     if MC-i > finish_steps:
                         d_cyc=MC-i-finish_steps
                         Xin=Xin+dX*d_cyc  
-                        sol=updated_pt_aloy_fit_all_2.f_run_cyc(Xin,Am/(rateMax),0,finish_steps,pars,tol_r,tol_a) 
+                        sol=f_run_cyc(Xin,Am/(rateMax),0,finish_steps,pars,tol_r,tol_a) 
                         i=MC
                     #just finish up
                     else:
-                        sol=updated_pt_aloy_fit_all_2.f_run_cyc(Xin,Am/(rateMax),0,finish_steps,pars,tol_r,tol_a) 
+                        sol=f_run_cyc(Xin,Am/(rateMax),0,finish_steps,pars,tol_r,tol_a) 
                         i=MC
                     break
                 
@@ -2449,9 +2448,9 @@ def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2):
     rez_n_4.append(i)
 
     w_string=str(i) + " " + np.array2string(Xin, threshold=np.inf, precision=8, separator=", ").replace("\n", "")
-    updated_pt_aloy_fit_all_2.f_append_to_file(filename,w_string)
+    f_append_to_file(filename,w_string)
     tEnd = time.time()
-    updated_pt_aloy_fit_all_2.f_append_to_file(filename,str(tEnd-tStart))
+    f_append_to_file(filename,str(tEnd-tStart))
 
     print("finish:" + str(i))
     #return rez_X_4,rez_stat_4,rez_n_4
