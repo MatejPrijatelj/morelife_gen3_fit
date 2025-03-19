@@ -2289,11 +2289,11 @@ def f_calc_delta(X0,X1,ModPars,dist_cs,dist_ls):
 #TODO: nested execution failsafes
 #TODO: breaks
 
-def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2,pars=pars,X0=X0):
+def f_test_cycle_skip(MC=100,round_factor=0.8, round_max_f=0.2,pars=pars,X0=None):
 
     #target
     #
-
+    
     tStart = time.time()
 
     #start cycles
