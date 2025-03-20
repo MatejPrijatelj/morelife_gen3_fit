@@ -2799,7 +2799,7 @@ for i, par in enumerate(ModPars0):
 
 
 #construc relevant functions
-def f_test_cycle_skip(MC=3000,round_factor=0.8, round_max_f=0.2,pars=pars,X0=X0):
+def f_test_cycle_skip_print(MC=3000,round_factor=0.8, round_max_f=0.2,pars=pars,X0=X0):
     
     ModPars=pars[0]
     tStart = time.time()
@@ -2967,18 +2967,186 @@ def f_test_cycle_skip(MC=3000,round_factor=0.8, round_max_f=0.2,pars=pars,X0=X0)
     return sol,rez_X_4,rez_n_4,rez_stat_4
 
 
+#construc relevant functions
+def f_test_cycle_skip(MC=3000,round_factor=0.8, round_max_f=0.2,pars=pars,X0=X0):
+    
+    ModPars=pars[0]
+    tStart = time.time()
+
+    #start cycles
+    s_cycs=2
+    #all positive bins never happens in this cycling
+    d_cyc=2
+    #finish steps
+    finish_steps=3
+    
+    t0=0
+    rez_stat_4=f_stats(X0,ModPars,vec_c,vec_l)
+    rez_stat_4=np.array(rez_stat_4)
+    rez_t_4=[t0]
+    Xin=X0
+    rez_X_4=np.array(X0)
+    rez_n_4=[0]
+    
+    #print(np.shape(rez_n_4))
+    #print(np.shape(rez_stat_4))
+    #print(np.shape(rez_X_4))
+
+    round_max = int(round_max_f*MC)
+    #print("round_max "+str(round_max))
+    
+    #current_date = datetime.now().strftime('%Y-%m-%d')
+    #base_filename = f"data_"+str(round_max)+f"_sim_{current_date}.txt"
+    #filename =  f_create_unique_filename(base_filename)
+    #f_append_to_file(filename,str(0) + " " + str(X0) )
+    
+    i=0
+    while i<MC:
+        #print(np.shape(rez_n_4))
+        #print(np.shape(rez_stat_4))
+        #print(np.shape(rez_X_4))
+        #print(i)
+        #initialise maybe calc a few cycles
+        #this remains the same as previous versions
+        if i<s_cycs:
+            #print("mode 0: calculating "+str(s_cycs)+" cycles")
+            #sol=f_run_cyc(Xin,0,s_cycs)
+            #sol=bimet_morelife_gen3c.f_run_cyc(Xin,Am/(rateMax),0,s_cycs)
+            sol=f_run_cyc(Xin,Am/(rateMax),0,s_cycs,pars,tol_r,tol_a)
+
+            Xin=sol.y[:,-1]
+            #print("cu: "+str(Xin[2]))
+            t0=sol.t[-1]
+    
+            trez=Xin
+            trez_stat=f_stats(trez,ModPars,vec_c,vec_l)
+            rez_stat_4=np.vstack((rez_stat_4,trez_stat))
+            #rez_t_2.append(t0)
+    
+            rez_X_4=np.vstack((rez_X_4,Xin))
+            
+            i=i+s_cycs
+            rez_n_4.append(i)
+            
+        else:
+            #print("mode 1: calculating "+str(1)+" cycle")
+            #calc one cycle to get dX
+            X01=Xin
+            #run a cycle and calculate dX
+            #sol=bimet_morelife_gen3c.f_run_cyc(Xin,Am/(rateMax),0,1)
+            tStart = time.time()
+            sol=f_run_cyc(Xin,Am/(rateMax),0,1,pars,tol_r,tol_a)
+            tEnd = time.time()
+            #print("Dt= "+str(tEnd-tStart))
+
+            Xin=sol.y[:,-1]
+            #print("cu: "+str(Xin[2]))
+    
+            if np.any(Xin[4:])<=0:
+                #print("encountered negative value")
+                break
+            
+            dX=f_calc_delta(X01,Xin,ModPars,vec_c,vec_l)
+            
+            i=i+1
+            #this may need to be changed in ver 2 in order to fix indices
+            Xin=sol.y[:,-1]
+            #we increment this anyways
+    
+            #check how much iteration we can afford. 
+            #loop trough all the ratios in diferentials.
+            #increment dX
+            #print(min(abs(Xin)))
+            #print(min(abs(dX)))
+            Xratios=Xin/dX
+            
+            #check wat is the smallest negative value and also report index.
+            max_ratio= np.max(Xratios[Xratios < 0]) if np.any(Xratios < 0) else None
+            
+            #print("max_ratio= "+str(max_ratio))
+            #treshold = 2.
+    
+            #all positive for some reason
+            #not very likely
+            if max_ratio == None:
+                #print("\tIF = all positive: keep going")
+                #skip d_cycs
+                Xin=Xin+dX*d_cyc
+                i=i+d_cyc
+    
+            #we can actually skip a few steps
+            elif abs(max_ratio) > 2:
+                #rounded_down = max_ratio
+                #print("rounded down "+str(rounded_down))
+                #rounded_down = round_factor
+                #print("rounded down "+str(rounded_down))
+                #rounded_down = max_ratio*round_factor
+                #print("rounded down "+str(rounded_down))
+                #rounded_down = abs(max_ratio*round_factor)
+                #print("rounded down "+str(rounded_down))
+                rounded_down = int(abs(max_ratio*round_factor))
+                #print("rounded down "+str(rounded_down))
+                rounded_down = min( rounded_down ,round_max)
+                #print("rounded down "+str(rounded_down))
+                #rounded_down=max(rounded_down,1)
+                #print("rounded down "+str(rounded_down))
+                #check if we can finish get close and do a few loops
+                #do some loops
+                #finish up
+                #break
+                if i+rounded_down >= MC:
+                    #print("finishing")
+                    #first do some steps then finish up
+                    if MC-i > finish_steps:
+                        d_cyc=MC-i-finish_steps
+                        Xin=Xin+dX*d_cyc  
+                        sol=f_run_cyc(Xin,Am/(rateMax),0,finish_steps,pars,tol_r,tol_a) 
+                        i=MC
+                    #just finish up
+                    else:
+                        sol=f_run_cyc(Xin,Am/(rateMax),0,finish_steps,pars,tol_r,tol_a) 
+                        i=MC
+                    break
+                
+                #print("\tIF > 2: cycle "+ str(rounded_down))
+                Xin=Xin+dX*rounded_down
+                i=i+rounded_down
+    
+            #we cant propagate
+            else:
+                #print("\tIF < 2: repeate")
+                #we have only calculated 
+                pass
+    
+            #record vector and stats and index values at the end.
+            #f_append_to_file(filename,str(i) + " " + str(Xin) )
+            
+        rez_X_4=np.vstack((rez_X_4,Xin))
+        trez_stat=f_stats(Xin,ModPars,vec_c,vec_l)
+        rez_stat_4=np.vstack((rez_stat_4,trez_stat))
+        rez_n_4.append(i)
+
+    #w_string=str(i) + " " + np.array2string(Xin, threshold=np.inf, precision=8, separator=", ").replace("\n", "")
+    #bimet_morelife_gen3c.f_append_to_file(filename,w_string)
+    #tEnd = time.time()
+    #bimet_morelife_gen3c.f_append_to_file(filename,str(tEnd-tStart))
+
+    #print("finish:" + str(i))
+    #return rez_X_4,rez_stat_4,rez_n_4
+    return sol,rez_X_4,rez_n_4,rez_stat_4
+
+
 def f_price_EOL(vek_in):
-    print("in_eol")
+    #print("in_eol")
     print(vek_in)
 
     #fill the modpars
     ModPars0=np.copy(ModPars)  
     for i,j in enumerate(vars):
         ModPars0[j]=vek_in[i]
-    for i,j in enumerate(ModPars0):
-        print(str(i)+" "+str(j))
-
-    pars0=(ModPars0,vec_c,vec_l,FCstate[1],FCstate[2],FCstate[0])
+    #for i,j in enumerate(ModPars0):
+        #print(str(i)+" "+str(j))
+    pars0 = (ModPars0,vec_c,vec_l,FCstate[1],FCstate[2],FCstate[0])
     sol,rez_X_4,rez_n_4,rez_stat_4 = f_test_cycle_skip(MC=3000,round_factor=0.8, round_max_f=0.2,pars=pars0,X0=X0)
     om=f_X_to_dist(sol.y[:,-1],vec_l,vec_c)
     
@@ -2990,7 +3158,7 @@ def f_price_EOL(vek_in):
 
     #plt.plot(rez_norm_r,label="sim-EOL")
     #plt.plot(hist_fix_EOL,label="ex-EOL")
-
+    print(price)
     return price
 
 ########################################################################
